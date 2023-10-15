@@ -13,51 +13,20 @@
 /// 第七至九位表示乡、镇（街道办事处）。其中000-099表示街道办事处，100-199表示镇，200-299表示乡，400-479表示林场、牧场、科技城、园区，480-499表示林业管理局，500-579表示农场、团，580-599表示畜牧场。
 ///
 /// 为了更详细地反映乡镇以下区划情况，国家统计局补充了三位表示居委会、村委会的代码。
-use std::{fmt, time};
+
+use std::fmt;
+
+use chrono::NaiveDate;
 
 const ID_LENGTH: usize = 18;
 
-static COEFFICIENT: &'static [u8; 17] = &[7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2];
-static CHECK: &'static [u8; 11] = &[1, 0, 255, 9, 8, 7, 6, 5, 4, 3, 2];
+static COEFFICIENT: &'static [u8; 17] = &[7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+static CHECK: &'static [char; 11] = &['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'];
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Gender {
     Male,
     Female,
-}
-
-// impl fmt::Debug for Gender {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             Gender::Male => write!(f, "Length must be 18"),
-//         }
-//     }
-// }
-
-#[cfg(adcode)]
-#[derive(Debug)]
-pub enum AreaRank {
-    Province,
-    City,
-    County,
-}
-
-#[cfg(chinese)]
-impl fmt::Debug for AreaRank {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("")
-            .field(&self.longitude)
-            .field(&self.latitude)
-            .finish()
-    }
-}
-
-#[cfg(adcode)]
-#[derive(Debug)]
-pub enum Adcode {
-    安徽省 = (J::Province, 340000),
-    滁州市 = (J::City, 341100),
-    琅琊区 = (J::County, 341103),
 }
 
 pub enum Error {
@@ -72,12 +41,21 @@ impl fmt::Debug for Error {
     }
 }
 
-struct ChinaId  {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Length => write!(f, "Length must be 18"),
+        }
+    }
+}
+
+struct ChinaId {
     raw: String,
+    birthday: NaiveDate,
     // 0-17
-    id17: Vec<u8>,
+    index_0_17: Vec<u8>,
     // 18
-    id18: u8,
+    index_18: char,
 }
 
 impl fmt::Display for ChinaId {
@@ -94,81 +72,79 @@ impl fmt::Debug for ChinaId {
 
 impl ChinaId {
     pub fn new(id: &str) -> Result<ChinaId, Error> {
-        let (is_valid, id17, id18) = Self::_is_valid(id);
+        let i = Vec::with_capacity(17);
 
-        if !is_valid {
-            // let e = fmt::Error::default("ChinaId");
+        let mut res = ChinaId {
+            raw: id.to_uppercase(),
+            birthday: NaiveDate::default(),
+            index_0_17: i,
+            index_18: '\0',
+        };
+
+        let chars = res.raw.chars();
+
+        if chars.clone().count() != ID_LENGTH {
             return Err(Error::Length);
         }
 
-        Ok(ChinaId {
-            raw: id.to_string(),
-            id17: id17,
-            id18: id18,
-        })
-    }
+        let mut sum = 0;
 
-    fn _is_valid(id: &str) -> (bool, Vec<u8>, u8) {
-        let mut list = vec![0 as u8; 17];
-
-        if id.len() == ID_LENGTH {
-            let mut sum = 0;
-
-            for (i, c) in id.chars().enumerate() {
-                match c.to_string().parse::<u8>() {
-                    Ok(c) => {
-                        list[i] = c;
-                        sum += c * COEFFICIENT[i];
-                    },
-                    Err(_) => break,
+        for (i, c) in chars.enumerate() {
+            // index: 18
+            if i == ID_LENGTH - 1 {
+                let y = (sum % 11) as usize;
+                if CHECK[y] == c {
+                    //  ALL Good
+                    return Ok(res);
                 }
             }
 
-            let y = (sum % 11) as usize;
-            CHECK[y];
+            if i == 6 {
+                match NaiveDate::parse_from_str(&res.raw.clone()[6..14], "%Y%m%d") {
+                    Ok(b) => res.birthday = b,
+                    Err(_) => return Err(Error::Length), // TODO 错误 日期解析错误
+                }
+            }
+
+            // index: 0-17
+            // must be number
+            match c.to_string().parse::<u8>() {
+                Ok(c) => {
+                    res.index_0_17.push(c);
+                    sum += c * COEFFICIENT[i];
+                }
+                Err(_) => return Err(Error::Length), // TODO 错误 不能为非数字
+            }
         }
 
-        (false, list, 0)
-    }
-
-    pub fn is_valid(id: &str) -> bool {
-        let (is_valid, _, _) = Self::_is_valid(id);
-        is_valid
+        return Err(Error::Length);
     }
 
     pub fn len(&self) -> usize {
-        ID_LENGTH
+        self.raw.len()
     }
 
-    // pub fn birthday(&self) -> time::Time {
-    //     time::Time::
-    // }
+    pub fn adcode(&self) -> &str {
+        &self.raw[..6]
+    }
+    pub fn birthday(&self) -> NaiveDate {
+        self.birthday
+    }
 
     pub fn gender(&self) -> Gender {
-        match self.id17[17] % 2 {
-            0 => Gender::Male,
-            _ => Gender::Female,
+        match self.index_0_17[16] % 2 {
+            0 => Gender::Female,
+            _ => Gender::Male,
         }
     }
 
-    pub fn province_name(&self) -> &str {
-        ""
-    }
-
-    #[cfg(chinese)]
-    pub fn province_name_zh(&self) -> &str {
-        ""
-    }
-
-    pub fn must_valid(id: &str) {
-        if !Self::is_valid(id) {
-            panic!("{} is not valid", id);
+    pub fn must_valid(res: Result<ChinaId, Error>) -> ChinaId {
+        if let Err(e) = res {
+            panic!("not valid {}", e);
         }
-    }
-}
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+        res.ok().unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -176,15 +152,20 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic]
     fn ut_empty() {
-        assert_eq!(ChinaId::is_valid(""), false);
-
         let _ = ChinaId::new("").unwrap();
     }
 
     #[test]
-    #[should_panic]
-    fn ut_must_valid() {
-        ChinaId::must_valid("")
+    fn ut_parse() {
+        let id = ChinaId::new("43102220200101133X").unwrap();
+
+        assert_eq!(id.adcode(), "431022");
+        assert_eq!(
+            id.birthday(),
+            NaiveDate::parse_from_str("20200101", "%Y%m%d").unwrap()
+        );
+        assert_eq!(id.gender(), Gender::Male);
     }
 }
