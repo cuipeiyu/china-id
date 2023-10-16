@@ -13,15 +13,14 @@
 /// 第七至九位表示乡、镇（街道办事处）。其中000-099表示街道办事处，100-199表示镇，200-299表示乡，400-479表示林场、牧场、科技城、园区，480-499表示林业管理局，500-579表示农场、团，580-599表示畜牧场。
 ///
 /// 为了更详细地反映乡镇以下区划情况，国家统计局补充了三位表示居委会、村委会的代码。
-
 use std::fmt;
 
 use chrono::NaiveDate;
 
 const ID_LENGTH: usize = 18;
 
-static COEFFICIENT: &'static [u8; 17] = &[7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
-static CHECK: &'static [char; 11] = &['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'];
+static COEFFICIENT: [usize; 17] = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+static CHECK: [char; 11] = ['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'];
 
 #[derive(Debug, PartialEq)]
 pub enum Gender {
@@ -29,33 +28,30 @@ pub enum Gender {
     Female,
 }
 
+#[derive(Debug)]
 pub enum Error {
-    Length,
-}
-
-impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Length => write!(f, "Length must be 18"),
-        }
-    }
+    Length(usize),
+    InvalidDate(String),
+    NotNumber(char),
+    Unknown,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Length => write!(f, "Length must be 18"),
+            Error::Length(len) => write!(f, "length must be 18, got {}", len),
+            Error::InvalidDate(curr) => write!(f, "invalid date format: {}", curr),
+            Error::NotNumber(c) => write!(f, "{} is not a valid number", c),
+            Error::Unknown => write!(f, "unknown error"),
         }
     }
 }
 
-struct ChinaId {
+pub struct ChinaId {
     raw: String,
     birthday: NaiveDate,
     // 0-17
-    index_0_17: Vec<u8>,
-    // 18
-    index_18: char,
+    index_0_17: Vec<usize>,
 }
 
 impl fmt::Display for ChinaId {
@@ -78,16 +74,15 @@ impl ChinaId {
             raw: id.to_uppercase(),
             birthday: NaiveDate::default(),
             index_0_17: i,
-            index_18: '\0',
         };
 
         let chars = res.raw.chars();
 
-        if chars.clone().count() != ID_LENGTH {
-            return Err(Error::Length);
+        if res.raw.len() != ID_LENGTH {
+            return Err(Error::Length(res.raw.len()));
         }
 
-        let mut sum = 0;
+        let mut sum: usize = 0;
 
         for (i, c) in chars.enumerate() {
             // index: 18
@@ -100,24 +95,25 @@ impl ChinaId {
             }
 
             if i == 6 {
-                match NaiveDate::parse_from_str(&res.raw.clone()[6..14], "%Y%m%d") {
+                let date = &res.raw.clone()[6..14];
+                match NaiveDate::parse_from_str(date, "%Y%m%d") {
                     Ok(b) => res.birthday = b,
-                    Err(_) => return Err(Error::Length), // TODO 错误 日期解析错误
+                    Err(_) => return Err(Error::InvalidDate(date.to_string())),
                 }
             }
 
             // index: 0-17
             // must be number
-            match c.to_string().parse::<u8>() {
+            match c.to_string().parse::<usize>() {
                 Ok(c) => {
                     res.index_0_17.push(c);
                     sum += c * COEFFICIENT[i];
                 }
-                Err(_) => return Err(Error::Length), // TODO 错误 不能为非数字
+                Err(_) => return Err(Error::NotNumber(c)),
             }
         }
 
-        return Err(Error::Length);
+        return Err(Error::Unknown);
     }
 
     pub fn len(&self) -> usize {
@@ -155,6 +151,12 @@ mod tests {
     #[should_panic]
     fn ut_empty() {
         let _ = ChinaId::new("").unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn ut_must_valid() {
+        let _ = ChinaId::must_valid(ChinaId::new(""));
     }
 
     #[test]
