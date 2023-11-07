@@ -7,85 +7,81 @@ import (
 	"time"
 )
 
-const ID_LENGTH = 18
+const _LENGTH = 18
 
 var _COEFFICIENT = []int64{7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2}
 var _CHECK = []byte{'1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'}
 
 var ErrLength = errors.New("id length must be 18")
-var ErrInvalidDate = errors.New("invalid birthday date")
+var ErrInvalidDate = errors.New("invalid birthday format")
 var ErrNotNumber = errors.New("non-string characters found in non-check bits")
 var ErrInvalidId = errors.New("invalid id card number")
 
-type ChinaId struct {
-	raw      string
-	birthday time.Time
-	female   bool
+type ChinaId string
+
+type Gender uint
+
+const (
+	Male Gender = iota
+	Female
+)
+
+func New(str string) ChinaId {
+	return ChinaId(strings.ToUpper(str))
 }
 
-func New(str string) (*ChinaId, error) {
-	str = strings.ToUpper(str)
-
-	if len(str) != 18 {
-		return nil, ErrLength
+func (id ChinaId) Valid() error {
+	if len(id) != _LENGTH {
+		return ErrLength
 	}
 
 	var sum int64
-	var female bool
 
-	for i, c := range str[:ID_LENGTH-1] {
+	for i, c := range id[:_LENGTH-1] {
 		// index: 0-17
 		// must be number
 		num, err := strconv.ParseInt(string(c), 10, 64)
 		if err != nil {
-			return nil, ErrNotNumber
+			return ErrNotNumber
 		}
 
 		sum += num * _COEFFICIENT[i]
-
-		if i == ID_LENGTH-1 {
-			// male or female
-			female = num%2 == 0
-		}
-	}
-
-	birthday, err := time.Parse("20060102", str[6:6+8])
-	if err != nil {
-		return nil, ErrInvalidDate
 	}
 
 	// index: 18
-	if _CHECK[sum%11] != str[ID_LENGTH-1] {
-		return nil, ErrInvalidId
+	if _CHECK[sum%11] != id[_LENGTH-1] {
+		return ErrInvalidId
 	}
 
-	//  ALL Good
-	return &ChinaId{
-		raw:      str,
-		female:   female,
-		birthday: birthday,
-	}, nil
+	if _, err := id.Birthday(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func Must(id *ChinaId, err error) *ChinaId {
+func (id ChinaId) Adcode() string {
+	return string(id[0:6])
+}
+
+func (id ChinaId) Birthday() (time.Time, error) {
+	if len(id) != _LENGTH {
+		return time.Time{}, ErrLength
+	}
+
+	birthday, err := time.Parse("20060102", string(id[6:6+8]))
 	if err != nil {
-		panic(err)
+		return time.Time{}, ErrInvalidDate
 	}
-	return id
+	return birthday, nil
 }
 
-func (id *ChinaId) Adcode() string {
-	return id.raw[:6]
-}
-
-func (id *ChinaId) Birthday() (time.Time, string) {
-	return id.birthday, id.raw[6:14]
-}
-
-func (id *ChinaId) Male() bool {
-	return !id.female
-}
-
-func (id *ChinaId) Female() bool {
-	return id.female
+func (id ChinaId) Gender() Gender {
+	num, err := strconv.ParseInt(string(id[16]), 10, 64)
+	if err == nil {
+		if num%2 == 0 {
+			return Female
+		}
+	}
+	return Male
 }

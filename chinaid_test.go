@@ -5,8 +5,9 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	id, err := New("43102220200101133X")
-	if err != nil {
+	id := New("43102220200101133x")
+
+	if err := id.Valid(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -14,17 +15,21 @@ func TestParse(t *testing.T) {
 		t.Fatal("wrong adcode")
 	}
 
-	if _, str := id.Birthday(); str != "20200101" {
+	if date, err := id.Birthday(); err != nil || date.Format("20060102") != "20200101" {
 		t.Fatal("wrong birthday")
 	}
 
-	if !id.Male() {
+	if id.Gender() != Male {
 		t.Fatal("wrong gender")
 	}
 }
 
 func BenchmarkParse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		New("43102220200101133X")
+		id := New("43102220200101133x")
+		id.Valid()
+		id.Adcode()
+		id.Birthday()
+		id.Gender()
 	}
 }
