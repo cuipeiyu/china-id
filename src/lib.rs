@@ -44,13 +44,7 @@ pub struct ChinaId(pub(crate) String);
 
 impl fmt::Display for ChinaId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl fmt::Debug for ChinaId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{}", self.0)
     }
 }
 
@@ -137,6 +131,7 @@ mod tests {
     fn ut_parse() {
         let id = ChinaId::new("43102220200101133x");
 
+        assert_eq!(format!("{}", id), "43102220200101133X");
         assert!(id.valid().is_ok());
         assert_eq!(id.adcode(), "431022");
         let b = id.birthday();

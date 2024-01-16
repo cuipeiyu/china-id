@@ -1,8 +1,8 @@
 [package]
 name = "china-id"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
-description = "A tool that can verify the validity of Chinese identity card numbers"
+description = "一个中国身份证号码解析库"
 license = "MIT OR Apache-2.0"
 authors = ["CuiPeiyu <i@cuipeiyu.com>"]
 repository = "https://github.com/cuipeiyu/china-id"
